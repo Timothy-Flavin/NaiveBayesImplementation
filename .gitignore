@@ -1,2 +1,4 @@
 MNIST
 EMAIL
+__pycache__/
+*.py[cod]
