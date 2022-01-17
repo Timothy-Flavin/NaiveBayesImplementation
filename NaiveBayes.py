@@ -12,6 +12,7 @@
 from json.encoder import INFINITY
 import numpy as np
 import math
+import string 
 
 class NBClassifier:
 
@@ -98,6 +99,8 @@ class NBClassifier:
     return self
 # bayes equation: P(Class|x) = P(x|Class)P(Class) / P(x)
 # P(x) not needed because it is constant
+
+# P(X|class)
   def _px_class(self, x, y, verbose=False):
     pxc = 0
     if verbose:
@@ -123,10 +126,33 @@ class NBClassifier:
 
     #print(f"_px_class: {math.pow(10,pxc)}, x:{x}")
     return pxc
+
+# P(class)
   def _p_class(self, y):
     return math.log(self.__class_len__[y]/self.__x_len__, 10)
-  
+
+# Predict 2d array like object x [instances,features]
   def predict(self, x, verbose=False):
+    predictions = list()
+    for xi in x:
+      predictions.append(self._predict(xi, verbose))
+    return predictions
+
+# Prints returns accuracy given data x with labels y
+  def score(self, x, y, verbose=False):
+    predictions = self.predict(x, verbose=False)
+    tot = len(y)
+    correct = 0
+    for yi, y_pred in zip(y, predictions):
+      if yi == y_pred:
+        correct+=1
+    
+    if verbose:
+      print(f"{correct}/{tot} correct, {correct/tot}%")
+    return correct/tot
+  
+# Internal predict function that predicts a single instance x
+  def _predict(self, x, verbose=False):
     max_p=-INFINITY
     max_i=-1
     for i, c in enumerate(self.__class_list__):
@@ -144,6 +170,17 @@ class NBClassifier:
       print(f"max class: i{max_i}:{self.__class_list__[max_i]}")
       print("----------------------------------------------------------")
     return self.__class_list__[max_i]
-  
-  def print_dicts():
-    print("Debugging...")
+
+# Format's input documents into individual words
+  def format_docs(self, x, verbose=False):
+    exclist = string.punctuation + string.digits
+    table_ = str.maketrans('', '', exclist)
+    for i,xi in enumerate(x):
+      if verbose:
+        print(f"String before\n{xi}")
+      # remove punctuations and digits from oldtext
+      x[i] = xi.translate(table_)
+      x[i] = x[i].lower().split()
+      if verbose:
+        print(f"String after\n{x[i]}")
+    return x
