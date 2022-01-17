@@ -9,6 +9,7 @@
 # y_train: list of numerical labels with the form [label]
 # x_test, x_train: Same format but for testing
 
+from json.encoder import INFINITY
 import numpy as np
 import math
 
@@ -19,6 +20,7 @@ class NBClassifier:
   __sum_dict__ = {}
   __cum_doc_len__ = 0
   __x_len__=0
+  __text__=False
 
   __class_list__ = list() # list of classes
   __class_dict__ = {} # {class: c_sum_dict}
@@ -28,7 +30,7 @@ class NBClassifier:
 
   def __init__(self, nb_type="bernouli", k=1,verbose=False):
     self.__k__ = k
-    if nb_type.lower() != "bernouli" and nb_type.lower != "multinomial":
+    if (nb_type.lower() != "bernouli") and (nb_type.lower() != "multinomial"):
       raise ValueError(f"Invalid type: '{nb_type}'")
 
     if(verbose):
@@ -43,6 +45,7 @@ class NBClassifier:
     x_train = np.array(x_train)
     y_train = np.array(y_train)
     self.__x_len__ = x_train.shape[0]
+    self.__text__=text
 
     #x_test = np.array(x_test)
     #y_test = np.array(y_test)
@@ -88,36 +91,59 @@ class NBClassifier:
           self.__cum_doc_len__ += sdict[i]
 
           self.__class_dict__[y][i] = self.__class_dict__[y].get(i,0)+sdict[i]
-          self.__class_doc_len__ += sdict[i]
+          self.__class_doc_len__[y] += sdict[i]
     # sanity check of doc length
     if(self.__cum_doc_len__ != x_train.shape[0] and self.__nb_type__ == 'bernouli'):
       print(f"Uh oh, cum_dl{self.__cum_doc_len__}, train_x len: {x_train.shape[0]}")
     return self
 # bayes equation: P(Class|x) = P(x|Class)P(Class) / P(x)
 # P(x) not needed because it is constant
-  def _px_class(self, x, y):
+  def _px_class(self, x, y, verbose=False):
     pxc = 0
-    print(f"y: {y}, class_dict[y]: {self.__class_dict__[y]}")
-    for xi in x:
-      print(f"xi: {xi}")
-      pxc += math.log((1.0*self.__class_dict__[y][xi] + self.__k__) / (self.__class_doc_len__[y]+self.__k__))
-    print(f"_px_class: {math.pow(10,pxc)}, x:{x}")
+    if verbose:
+      print(f"y: {y}, class_dict[y]: {self.__class_dict__[y]}, class_doc_len: {self.__class_doc_len__[y]}")
+    if self.__text__:
+      for i,xi in enumerate(x):
+        pxc += math.log((1.0*self.__class_dict__[y].get(xi,0) + self.__k__) / (self.__class_doc_len__[y]+self.__k__), 10)
+    else:
+      for i,xi in enumerate(x):
+        num_occurences=0
+        if xi>0:
+          num_occurences = self.__class_dict__[y][i]
+        else:  
+          num_occurences = self.__class_doc_len__[y] - self.__class_dict__[y][i]
+        
+        p_temp = (1.0*num_occurences + self.__k__) / (self.__class_doc_len__[y]+self.__k__)
+        if verbose:
+          print(f"Num occurences: {num_occurences}, p_temp:{p_temp}")
+        if self.__nb_type__ == "bernouli" or xi==0:
+          pxc += math.log(p_temp,10)
+        elif self.__nb_type__ == "multinomial":
+          pxc += math.log(p_temp,10)*xi
+
+    #print(f"_px_class: {math.pow(10,pxc)}, x:{x}")
     return pxc
   def _p_class(self, y):
-    return math.log(self.__class_len__[y]/self.__x_len__)
+    return math.log(self.__class_len__[y]/self.__x_len__, 10)
   
   def predict(self, x, verbose=False):
-    max_p=0
+    max_p=-INFINITY
     max_i=-1
     for i, c in enumerate(self.__class_list__):
-      self.__class_prob__[c] = self._px_class(x,c) * self._p_class(c)
-      if self.__class_prob__[c] < max_p:
+      if verbose:
+        print(f"predicting p({c} | {x})")
+        print(f"pxc: {self._px_class(x,c, verbose=False)} + p_class: {self._p_class(c)}")
+      self.__class_prob__[c] = self._px_class(x,c, verbose=verbose) + self._p_class(c)
+      if verbose:
+        print(f"class prob: {math.pow(10,self.__class_prob__[c])}")
+      if self.__class_prob__[c] > max_p:
         max_p = self.__class_prob__[c]
         max_i = i
     if verbose:
-      print(f"predicting {x}")
       print(f"Class probabilities: {self.__class_prob__}")
-    return max_i
+      print(f"max class: i{max_i}:{self.__class_list__[max_i]}")
+      print("----------------------------------------------------------")
+    return self.__class_list__[max_i]
   
   def print_dicts():
     print("Debugging...")
