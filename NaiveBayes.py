@@ -41,12 +41,24 @@ class NBClassifier:
 # k is the laplace smoothing number, usually 1
 # text is true or false if it is textual data or not
   def fit(self, x_train, y_train, verbose=False, text=False):
+    self.__sum_dict__ = {}
+    self.__cum_doc_len__ = 0
+    self.__x_len__=0
+    self.__text__=text
+
+    self.__class_list__ = list() # list of classes
+    self.__class_dict__ = {} # {class: c_sum_dict}
+    self.__class_len__ = {} # {class: number of instances of this class}
+    self.__class_doc_len__ = {} # {class: number of "words" in this class}
+    self.__class_prob__ = {} # {c: pc} of probabilities for each class
+
+
     if verbose:
       print(f"Fitting naive bayes with type: {self.__nb_type__}")
-    x_train = np.array(x_train)
-    y_train = np.array(y_train)
-    self.__x_len__ = x_train.shape[0]
-    self.__text__=text
+    if not text:
+      x_train = np.array(x_train)
+      y_train = np.array(y_train)
+    self.__x_len__ = len(x_train)
 
     #x_test = np.array(x_test)
     #y_test = np.array(y_test)
@@ -94,8 +106,8 @@ class NBClassifier:
           self.__class_dict__[y][i] = self.__class_dict__[y].get(i,0)+sdict[i]
           self.__class_doc_len__[y] += sdict[i]
     # sanity check of doc length
-    if(self.__cum_doc_len__ != x_train.shape[0] and self.__nb_type__ == 'bernouli'):
-      print(f"Uh oh, cum_dl{self.__cum_doc_len__}, train_x len: {x_train.shape[0]}")
+    if(self.__cum_doc_len__ != len(x_train) and self.__nb_type__ == 'bernouli'):
+      print(f"Uh oh, cum_dl{self.__cum_doc_len__}, train_x len: {len(x_train)}")
     return self
 # bayes equation: P(Class|x) = P(x|Class)P(Class) / P(x)
 # P(x) not needed because it is constant
@@ -106,8 +118,10 @@ class NBClassifier:
     if verbose:
       print(f"y: {y}, class_dict[y]: {self.__class_dict__[y]}, class_doc_len: {self.__class_doc_len__[y]}")
     if self.__text__:
+      if (self.__nb_type__ == 'bernouli'):
+        x = list(set(x))
       for i,xi in enumerate(x):
-        pxc += math.log((1.0*self.__class_dict__[y].get(xi,0) + self.__k__) / (self.__class_doc_len__[y]+self.__k__), 10)
+        pxc += math.log((1.0*self.__class_dict__[y].get(xi,0) + self.__k__) / (self.__class_doc_len__[y]+self.__k__*len(self.__class_list__)), 10)
     else:
       for i,xi in enumerate(x):
         num_occurences=0
@@ -116,7 +130,7 @@ class NBClassifier:
         else:  
           num_occurences = self.__class_doc_len__[y] - self.__class_dict__[y][i]
         
-        p_temp = (1.0*num_occurences + self.__k__) / (self.__class_doc_len__[y]+self.__k__)
+        p_temp = (1.0*num_occurences + self.__k__) / (self.__class_doc_len__[y]+self.__k__*len(self.__class_list__))
         if verbose:
           print(f"Num occurences: {num_occurences}, p_temp:{p_temp}")
         if self.__nb_type__ == "bernouli" or xi==0:
@@ -184,3 +198,18 @@ class NBClassifier:
       if verbose:
         print(f"String after\n{x[i]}")
     return x
+
+# 5 fold cross validation of x and y. Returns array of results and average result
+  def cross_val(self, x, y, verbose=False, text=False):
+    cut = int(len(x)/5)
+    scores = list()
+    for i in range(5):
+      testx = x[i*cut:(i+1)*cut]
+      trainx = x[0:i*cut]+x[(i+1)*cut:-1]
+      testy = y[i*cut:(i+1)*cut]
+      trainy = y[0:i*cut]+y[(i+1)*cut:-1]
+      self.fit(trainx, trainy, text=text)
+      scores.append(self.score(testx, testy))
+    std = np.std(scores)
+    mean = np.mean(scores)
+    return scores, mean, std
